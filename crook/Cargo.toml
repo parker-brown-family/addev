@@ -1,6 +1,6 @@
 [package]
 name = "crook"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "MIT"
 description = "Local agent-state bus: one writer, many displays. Answers 'which agent needs you' and draws nothing."

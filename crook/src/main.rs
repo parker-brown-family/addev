@@ -468,7 +468,16 @@ fn hook_event_to_report(payload: &HookPayload) -> Option<Report> {
         agent: "claude-code".into(),
         state: state.into(),
         source: "self".into(),
-        title: payload.prompt.as_deref().map(|p| clean_line(p, 120)),
+        // A prompt is only a card title when a person plausibly typed it.
+        // Harnesses inject machinery as user turns — task notifications,
+        // system envelopes — and those open with a tag. Skipping them keeps
+        // the previous human prompt on the card instead of replacing it with
+        // plumbing (an absent title never overwrites an existing one).
+        title: payload
+            .prompt
+            .as_deref()
+            .filter(|p| !p.trim_start().starts_with('<'))
+            .map(|p| clean_line(p, 120)),
         cwd: payload.cwd.clone(),
         pid: None, // filled by the caller, which knows it is inside a hook
         transcript: payload.transcript_path.clone(),
@@ -1034,6 +1043,23 @@ mod tests {
             assert_eq!(r.state, want, "{event}");
         }
         assert!(hook_event_to_report(&mk("SomethingNew", "")).is_none());
+    }
+
+    #[test]
+    fn injected_envelope_prompts_do_not_become_titles() {
+        let p: HookPayload = serde_json::from_str(
+            r#"{"session_id":"s1","hook_event_name":"UserPromptSubmit","prompt":"<task-notification> <task-id>x1</task-id>"}"#,
+        )
+        .unwrap();
+        let r = hook_event_to_report(&p).unwrap();
+        assert!(r.title.is_none(), "machinery is not a human prompt");
+        // and because absent titles never overwrite, the previous one survives
+        let mut doc = Doc::empty();
+        let mut first = report("s1", "working");
+        first.title = Some("fix the tests".into());
+        apply_report(&mut doc, &manifests(), first, 1000);
+        apply_report(&mut doc, &manifests(), r, 1000 + THROTTLE_SECS + 1);
+        assert_eq!(doc.sessions[0].title.as_deref(), Some("fix the tests"));
     }
 
     #[test]
