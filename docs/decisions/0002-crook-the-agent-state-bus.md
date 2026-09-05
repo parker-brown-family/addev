@@ -1,7 +1,7 @@
 # 0002 — Crook, the agent-state bus
 
 Date: 2026-09-03
-Status: accepted, unbuilt
+Status: accepted; v0.1 built 2026-09-05 (see the addendum at the end)
 
 Depends on `0001 — herdr is read, not copied`.
 
@@ -112,3 +112,40 @@ A crook is the shepherd's hook, the tool for singling one animal out of a flock
 — which is the whole job. Free on crates.io as of 2026-09-03. Bellwether was the
 first choice and is taken in this exact niche by `joelhooks/pi-bellwether`, a
 herdr session manager.
+
+## Addendum — what v0.1 resolved (2026-09-05)
+
+Built overnight as `crook/` in this repository, forced by a consumer: the
+`omarchy-agent-wool` wall was about to become the fourth parallel state
+detector, which is the pathology this record diagnoses. Each deliberately
+unresolved question got the smallest honest answer:
+
+- **Daemon vs library:** neither. Short-lived verbs over one flock-locked,
+  atomically renamed file. There is no process to babysit, and `watch` is a
+  300ms mtime poll.
+- **File vs socket:** a file, at the well-known path. Consumers may either
+  read it directly — the whole staleness contract is one comparison, because
+  writers precompute `stale_after` — or ask `crook status --json`, which also
+  applies it.
+- **`crook wait`:** deferred, as contemplated. Tracked as a follow-up issue.
+- **What a manifest contains, v1 slice:** agent kind, whether it
+  self-reports (in which case the herdr mirror skips it — no correlation
+  problem, no duplicate entries), the `working` heartbeat TTL, and the names
+  herdr uses for the kind. JSON, one file per kind, engine-gated. The full
+  screen-classification engine stays deliberately absent.
+- **Self-reporting, realised:** machine-global Claude Code hooks call
+  `crook hook` on SessionStart, UserPromptSubmit, PostToolUse (throttled
+  heartbeat), Notification, Stop and SessionEnd. Stop maps to `done` and a
+  display calling `crook seen` is what ends it — finished-and-unseen is a
+  first-class state, as demanded above.
+- **Liveness:** entries carry the agent's pid where discoverable; a dead pid
+  past a grace window is pruned, a stale `working` decays to `unknown`, and
+  unknown draws as attention, never as calm.
+
+Verified live the night it was built: a probe session's idle → working → done
+lifecycle captured off the file, three concurrent real sessions self-reporting
+within minutes, herdr's claude panes correctly not mirrored.
+
+The bet's clock now runs from tonight: Wool is a consumer that is neither
+Terminal Delight nor `omarchy-herd`, but it is still this developer's own
+software — external adoption remains the signal that wins the bet.
