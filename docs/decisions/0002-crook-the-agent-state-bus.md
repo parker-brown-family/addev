@@ -149,3 +149,9 @@ within minutes, herdr's claude panes correctly not mirrored.
 The bet's clock now runs from tonight: Wool is a consumer that is neither
 Terminal Delight nor `omarchy-herd`, but it is still this developer's own
 software — external adoption remains the signal that wins the bet.
+
+Later the same day, on releasing publicly (addev public, crook 0.1.0 on
+crates.io), Parker withdrew the six-month framing outright — it had already
+been misused once, as an argument for delaying the release it was supposed to
+evaluate. External adoption stays interesting as a signal; it is not a clock,
+not a gate, and no future decision should cite it as either.
