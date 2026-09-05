@@ -1,4 +1,4 @@
-# ADDev — working contract
+# Herd — working contract
 
 Canonical project behaviour file. `CLAUDE.md` is a symlink to this; add a symlink
 for any new agent rather than copying content out.
@@ -9,9 +9,17 @@ remote, numbered artifacts named not numbered — live in
 
 ## What this repository is
 
-An open-source, MIT-licensed agentic development environment for a solo developer
-on Omarchy. Local only. Currently a seed: `docs/vision.md` holds the shape, and
-nothing is built.
+Herd, the local agent-state bus: one writer, many displays, and it draws
+nothing itself. Open source, MIT, local only, no daemon. The `herd` binary lives
+in `src/`; the displays that read its state file are separate repositories
+(Crook on the Omarchy bar, Wool on the wall).
+
+The repository began as **addev**, an umbrella name for an agentic development
+environment, with the bus as a `crook/` subdirectory. The umbrella described
+nothing anyone shipped and was dropped; the bus was promoted to the root and
+took the name Herd. `docs/addev-seed-readme.md` keeps the original README as
+history, and `docs/vision.md` still holds the wider shape for whatever earns
+building next.
 
 ## The rule that matters most
 
@@ -41,7 +49,7 @@ open.
 
 ## And the reverse
 
-ADDev does not shape Conclave's architecture. `0005 — Two products` in the
+Herd does not shape Conclave's architecture. `0005 — Two products` in the
 Conclave repository records this as the load-bearing constraint of having two
 products at all. Nothing here is a requirement on anything there.
 
@@ -62,5 +70,6 @@ implementation genuinely demands it.
 
 ## Status
 
-Seed. Before writing code, write a decision record — this repository will use the
-same numbered, append-only convention as its sibling, in `docs/decisions/`.
+Shipping. `herd` 0.1.1 is published as the `herd-bus` crate. Decision records go
+in `docs/decisions/`, numbered and append-only like the sibling repository's,
+and a change that carries a decision gets one before it gets code.

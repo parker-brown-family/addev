@@ -1,11 +1,11 @@
-// Crook — the agent-state bus. One writer, many displays; it draws nothing.
+// Herd — the agent-state bus. One writer, many displays; it draws nothing.
 //
 // Everything here is a short-lived verb over one file:
 //
-//   ${XDG_STATE_HOME:-~/.local/state}/crook/state.json
+//   ${XDG_STATE_HOME:-~/.local/state}/herd/state.json
 //
 // There is deliberately no daemon. Agents feed the file (Claude Code hooks call
-// `crook hook`; anything else can call `crook report`); `crook sync-herdr`
+// `herd hook`; anything else can call `herd report`); `herd sync-herdr`
 // mirrors in the agents that cannot speak for themselves; displays read the
 // file. The write path is flock + write-temp + rename, so a reader never sees
 // a half-written document and two writers never interleave.
@@ -89,7 +89,7 @@ struct Entry {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct Doc {
-    crook: Meta,
+    herd: Meta,
     updated_at: u64,
     sessions: Vec<Entry>,
 }
@@ -97,7 +97,7 @@ struct Doc {
 impl Doc {
     fn empty() -> Self {
         Doc {
-            crook: Meta { version: VERSION.into(), engine: ENGINE },
+            herd: Meta { version: VERSION.into(), engine: ENGINE },
             updated_at: now(),
             sessions: Vec::new(),
         }
@@ -173,10 +173,10 @@ fn load_manifests(paths: &Paths) -> Vec<Manifest> {
                     by_agent.insert(m.agent.clone(), m);
                 }
                 Some(m) => {
-                    eprintln!("crook: manifest {} wants engine {} (this crook speaks {}); skipped", p.display(), m.engine, ENGINE);
+                    eprintln!("herd: manifest {} wants engine {} (this herd speaks {}); skipped", p.display(), m.engine, ENGINE);
                 }
                 None => {
-                    eprintln!("crook: manifest {} is not readable as a manifest; skipped", p.display());
+                    eprintln!("herd: manifest {} is not readable as a manifest; skipped", p.display());
                 }
             }
         }
@@ -209,8 +209,8 @@ impl Paths {
         let config_base = std::env::var("XDG_CONFIG_HOME")
             .unwrap_or_else(|_| format!("{home}/.config"));
         Paths {
-            state_dir: PathBuf::from(state_base).join("crook"),
-            manifest_dir: PathBuf::from(config_base).join("crook/manifests"),
+            state_dir: PathBuf::from(state_base).join("herd"),
+            manifest_dir: PathBuf::from(config_base).join("herd/manifests"),
         }
     }
     fn state_file(&self) -> PathBuf {
@@ -260,7 +260,7 @@ fn load_doc(paths: &Paths) -> Doc {
 
 fn save_doc(paths: &Paths, doc: &mut Doc) -> std::io::Result<()> {
     doc.updated_at = now();
-    doc.crook = Meta { version: VERSION.into(), engine: ENGINE };
+    doc.herd = Meta { version: VERSION.into(), engine: ENGINE };
     // Attention order in the file itself, so the laziest possible consumer —
     // one that just draws the array — still puts the needful first.
     doc.sessions.sort_by_key(|e| (state_rank(&e.state), e.key.clone()));
@@ -384,7 +384,7 @@ fn prune(doc: &mut Doc, at: u64) -> bool {
     doc.sessions.len() != before
 }
 
-/// The one-line staleness contract, applied for consumers who ask crook
+/// The one-line staleness contract, applied for consumers who ask herd
 /// rather than reading the file themselves.
 fn effective_state(e: &Entry, at: u64) -> &str {
     match e.stale_after {
@@ -421,7 +421,7 @@ fn clean_line(s: &str, max: usize) -> String {
 }
 
 /// Climb from this process toward init looking for the Claude Code process
-/// itself. The hook command runs as claude → sh → crook, but the number of
+/// itself. The hook command runs as claude → sh → herd, but the number of
 /// intermediate shells is not ours to assume.
 fn find_claude_ancestor() -> Option<i32> {
     let mut pid = unsafe { libc::getppid() };
@@ -648,7 +648,7 @@ fn cmd_sync_herdr(paths: &Paths) -> i32 {
     changed |= prune(&mut doc, at);
     if changed {
         if let Err(e) = save_doc(paths, &mut doc) {
-            eprintln!("crook: cannot write state: {e}");
+            eprintln!("herd: cannot write state: {e}");
             return 1;
         }
     }
@@ -673,7 +673,7 @@ fn cmd_report(paths: &Paths, args: &[String]) -> i32 {
         let mut grab = |name: &str| -> Option<String> {
             let v = it.next().cloned();
             if v.is_none() {
-                eprintln!("crook report: {name} needs a value");
+                eprintln!("herd report: {name} needs a value");
             }
             v
         };
@@ -692,24 +692,24 @@ fn cmd_report(paths: &Paths, args: &[String]) -> i32 {
             "--transcript" => transcript = grab("--transcript"),
             "--detail" => detail = grab("--detail"),
             other => {
-                eprintln!("crook report: unknown flag {other}");
+                eprintln!("herd report: unknown flag {other}");
                 return 2;
             }
         }
     }
 
     let (Some(key), Some(agent), Some(state)) = (key, agent, state) else {
-        eprintln!("crook report: --key, --agent and --state are required");
+        eprintln!("herd report: --key, --agent and --state are required");
         return 2;
     };
     if !valid_state(&state) {
-        eprintln!("crook report: state must be one of working|blocked|done|idle|error|unknown");
+        eprintln!("herd report: state must be one of working|blocked|done|idle|error|unknown");
         return 2;
     }
 
     let manifests = load_manifests(paths);
     let Ok(_guard) = lock(paths) else {
-        eprintln!("crook: cannot take the state lock");
+        eprintln!("herd: cannot take the state lock");
         return 1;
     };
     let mut doc = load_doc(paths);
@@ -722,7 +722,7 @@ fn cmd_report(paths: &Paths, args: &[String]) -> i32 {
     );
     if changed {
         if let Err(e) = save_doc(paths, &mut doc) {
-            eprintln!("crook: cannot write state: {e}");
+            eprintln!("herd: cannot write state: {e}");
             return 1;
         }
     }
@@ -733,7 +733,7 @@ fn cmd_seen(paths: &Paths, args: &[String]) -> i32 {
     let all = args.iter().any(|a| a == "--all");
     let key = args.iter().find(|a| !a.starts_with("--")).cloned();
     if !all && key.is_none() {
-        eprintln!("crook seen: pass a session key, or --all");
+        eprintln!("herd seen: pass a session key, or --all");
         return 2;
     }
     let Ok(_guard) = lock(paths) else { return 1 };
@@ -783,14 +783,14 @@ fn cmd_status(paths: &Paths, json: bool) -> i32 {
         .collect();
     if json {
         println!("{}", serde_json::to_string_pretty(&serde_json::json!({
-            "crook": doc.crook,
+            "herd": doc.herd,
             "updated_at": doc.updated_at,
             "sessions": rows,
         })).unwrap());
         return 0;
     }
     if rows.is_empty() {
-        println!("no agents reported. (hooks feed claude sessions; `crook sync-herdr` mirrors herdr)");
+        println!("no agents reported. (hooks feed claude sessions; `herd sync-herdr` mirrors herdr)");
         return 0;
     }
     for r in rows {
@@ -859,22 +859,22 @@ fn cmd_paths(paths: &Paths) -> i32 {
 /// a machine, so the human does the paste and keeps the veto.
 const HOOKS_SNIPPET: &str = r#"{
   "SessionStart": [
-    { "hooks": [ { "type": "command", "command": "crook hook 2>/dev/null || true", "timeout": 5 } ] }
+    { "hooks": [ { "type": "command", "command": "herd hook 2>/dev/null || true", "timeout": 5 } ] }
   ],
   "UserPromptSubmit": [
-    { "hooks": [ { "type": "command", "command": "crook hook 2>/dev/null || true", "timeout": 5 } ] }
+    { "hooks": [ { "type": "command", "command": "herd hook 2>/dev/null || true", "timeout": 5 } ] }
   ],
   "PostToolUse": [
-    { "matcher": ".*", "hooks": [ { "type": "command", "command": "crook hook 2>/dev/null || true", "timeout": 5 } ] }
+    { "matcher": ".*", "hooks": [ { "type": "command", "command": "herd hook 2>/dev/null || true", "timeout": 5 } ] }
   ],
   "Notification": [
-    { "hooks": [ { "type": "command", "command": "crook hook 2>/dev/null || true", "timeout": 5 } ] }
+    { "hooks": [ { "type": "command", "command": "herd hook 2>/dev/null || true", "timeout": 5 } ] }
   ],
   "Stop": [
-    { "hooks": [ { "type": "command", "command": "crook hook 2>/dev/null || true", "timeout": 5 } ] }
+    { "hooks": [ { "type": "command", "command": "herd hook 2>/dev/null || true", "timeout": 5 } ] }
   ],
   "SessionEnd": [
-    { "hooks": [ { "type": "command", "command": "crook hook 2>/dev/null || true", "timeout": 5 } ] }
+    { "hooks": [ { "type": "command", "command": "herd hook 2>/dev/null || true", "timeout": 5 } ] }
   ]
 }"#;
 
@@ -883,8 +883,8 @@ fn cmd_hooks() -> i32 {
         "Merge these entries into the \"hooks\" object of ~/.claude/settings.json.
 Each event's array may already exist — append, don't replace. If your hook
 environment's PATH is uncertain, spell the command as an absolute path
-(e.g. ~/.cargo/bin/crook). The command is deliberately \"|| true\": a missing
-or broken crook must never break a session.
+(e.g. ~/.cargo/bin/herd). The command is deliberately \"|| true\": a missing
+or broken herd must never break a session.
 
 {HOOKS_SNIPPET}"
     );
@@ -893,21 +893,21 @@ or broken crook must never break a session.
 
 fn usage() -> i32 {
     eprintln!(
-        "crook {VERSION} — local agent-state bus. One writer, many displays; draws nothing.
+        "herd {VERSION} — local agent-state bus. One writer, many displays; draws nothing.
 
 USAGE
-  crook status [--json]     what the flock is doing (prunes dead sessions)
-  crook watch               newline-delimited JSON on every state change
-  crook report --key K --agent KIND --state S [--source --title --cwd --pid --transcript --detail]
-  crook seen KEY|--all      done -> idle (finished-and-seen is not finished-and-unseen)
-  crook sync-herdr          mirror herdr's agents (skips kinds that self-report)
-  crook hook                Claude Code hook sink: reads the hook JSON on stdin
-  crook hooks               print the Claude Code settings.json wiring to install
-  crook paths               where state and manifests live
+  herd status [--json]     what the flock is doing (prunes dead sessions)
+  herd watch               newline-delimited JSON on every state change
+  herd report --key K --agent KIND --state S [--source --title --cwd --pid --transcript --detail]
+  herd seen KEY|--all      done -> idle (finished-and-seen is not finished-and-unseen)
+  herd sync-herdr          mirror herdr's agents (skips kinds that self-report)
+  herd hook                Claude Code hook sink: reads the hook JSON on stdin
+  herd hooks               print the Claude Code settings.json wiring to install
+  herd paths               where state and manifests live
 
 STATES  working blocked done idle error unknown
 READERS An entry past its stale_after is UNKNOWN, whatever its state says.
-FILE    ~/.local/state/crook/state.json (atomic renames; safe to watch)"
+FILE    ~/.local/state/herd/state.json (atomic renames; safe to watch)"
     );
     2
 }
@@ -925,7 +925,7 @@ fn main() {
         Some("hooks") => cmd_hooks(),
         Some("paths") => cmd_paths(&paths),
         Some("--version") | Some("-V") => {
-            println!("crook {VERSION} (engine {ENGINE})");
+            println!("herd {VERSION} (engine {ENGINE})");
             0
         }
         _ => usage(),
@@ -1135,7 +1135,7 @@ mod tests {
             let cmd = v[event][0]["hooks"][0]["command"]
                 .as_str()
                 .unwrap_or_default();
-            assert!(cmd.contains("crook hook"), "{event} wires crook hook");
+            assert!(cmd.contains("herd hook"), "{event} wires herd hook");
             assert!(cmd.contains("|| true"), "{event} cannot break a session");
         }
     }

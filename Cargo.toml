@@ -1,0 +1,25 @@
+[package]
+# The package is herd-bus only because crates.io's `herd` is a dead 2022
+# squat; the binary this installs is `herd`, and the project is Herd.
+name = "herd-bus"
+version = "0.2.0"
+edition = "2021"
+license = "MIT"
+description = "Herd, the local agent-state bus: one writer, many displays. Installs the `herd` binary; answers 'which agent needs you' and draws nothing."
+repository = "https://github.com/parker-brown-family/herd"
+readme = "README.md"
+keywords = ["agents", "claude", "status", "attention", "cli"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "herd"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+libc = "0.2"
+
+[profile.release]
+lto = true
+strip = true
