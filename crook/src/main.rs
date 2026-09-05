@@ -229,6 +229,17 @@ struct Lock {
 
 fn lock(paths: &Paths) -> std::io::Result<Lock> {
     std::fs::create_dir_all(&paths.state_dir)?;
+    // The state file carries last-prompt text. On a single-user box that is
+    // nobody's business but yours; on a shared one it must not be world-
+    // readable, so the directory is private and stays private even if it
+    // pre-existed looser.
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(
+            &paths.state_dir,
+            std::fs::Permissions::from_mode(0o700),
+        );
+    }
     let f = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
@@ -834,6 +845,43 @@ fn cmd_paths(paths: &Paths) -> i32 {
     0
 }
 
+/// The Claude Code wiring, printed rather than installed: merging JSON into
+/// someone's live settings file is how a status tool breaks every session on
+/// a machine, so the human does the paste and keeps the veto.
+const HOOKS_SNIPPET: &str = r#"{
+  "SessionStart": [
+    { "hooks": [ { "type": "command", "command": "crook hook 2>/dev/null || true", "timeout": 5 } ] }
+  ],
+  "UserPromptSubmit": [
+    { "hooks": [ { "type": "command", "command": "crook hook 2>/dev/null || true", "timeout": 5 } ] }
+  ],
+  "PostToolUse": [
+    { "matcher": ".*", "hooks": [ { "type": "command", "command": "crook hook 2>/dev/null || true", "timeout": 5 } ] }
+  ],
+  "Notification": [
+    { "hooks": [ { "type": "command", "command": "crook hook 2>/dev/null || true", "timeout": 5 } ] }
+  ],
+  "Stop": [
+    { "hooks": [ { "type": "command", "command": "crook hook 2>/dev/null || true", "timeout": 5 } ] }
+  ],
+  "SessionEnd": [
+    { "hooks": [ { "type": "command", "command": "crook hook 2>/dev/null || true", "timeout": 5 } ] }
+  ]
+}"#;
+
+fn cmd_hooks() -> i32 {
+    println!(
+        "Merge these entries into the \"hooks\" object of ~/.claude/settings.json.
+Each event's array may already exist — append, don't replace. If your hook
+environment's PATH is uncertain, spell the command as an absolute path
+(e.g. ~/.cargo/bin/crook). The command is deliberately \"|| true\": a missing
+or broken crook must never break a session.
+
+{HOOKS_SNIPPET}"
+    );
+    0
+}
+
 fn usage() -> i32 {
     eprintln!(
         "crook {VERSION} — local agent-state bus. One writer, many displays; draws nothing.
@@ -845,6 +893,7 @@ USAGE
   crook seen KEY|--all      done -> idle (finished-and-seen is not finished-and-unseen)
   crook sync-herdr          mirror herdr's agents (skips kinds that self-report)
   crook hook                Claude Code hook sink: reads the hook JSON on stdin
+  crook hooks               print the Claude Code settings.json wiring to install
   crook paths               where state and manifests live
 
 STATES  working blocked done idle error unknown
@@ -864,6 +913,7 @@ fn main() {
         Some("seen") => cmd_seen(&paths, &args[1..]),
         Some("sync-herdr") => cmd_sync_herdr(&paths),
         Some("hook") => cmd_hook(&paths),
+        Some("hooks") => cmd_hooks(),
         Some("paths") => cmd_paths(&paths),
         Some("--version") | Some("-V") => {
             println!("crook {VERSION} (engine {ENGINE})");
@@ -1043,6 +1093,25 @@ mod tests {
         assert!(!prune(&mut doc, 1000 + NO_PID_EXPIRY_SECS - 1));
         assert!(prune(&mut doc, 1000 + NO_PID_EXPIRY_SECS + 1));
         assert!(doc.sessions.is_empty());
+    }
+
+    #[test]
+    fn the_printed_hooks_snippet_is_valid_and_covers_the_lifecycle() {
+        let v: serde_json::Value = serde_json::from_str(HOOKS_SNIPPET).expect("snippet parses");
+        for event in [
+            "SessionStart",
+            "UserPromptSubmit",
+            "PostToolUse",
+            "Notification",
+            "Stop",
+            "SessionEnd",
+        ] {
+            let cmd = v[event][0]["hooks"][0]["command"]
+                .as_str()
+                .unwrap_or_default();
+            assert!(cmd.contains("crook hook"), "{event} wires crook hook");
+            assert!(cmd.contains("|| true"), "{event} cannot break a session");
+        }
     }
 
     #[test]
